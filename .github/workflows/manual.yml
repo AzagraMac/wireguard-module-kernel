@@ -26,7 +26,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get install --yes \
+          sudo apt install --yes \
             bc \
             binutils \
             bison \
@@ -40,11 +40,14 @@ jobs:
             libssl-dev \
             rsync \
             zstd
-          sudo apt-get install --yes pahole || true
+          sudo apt install --yes pahole || true
+          sudo apt clean all
+          
       - name: Configure git
         run: |
           git config user.email ${{ secrets.GIT_MAIL }}
-          git config user.name "Linux kernel build"
+          git config user.name "AzagraMac"
+          
       - name: Generate version string
         env:
           PKGARCH: "${{ matrix.arch }}"
@@ -53,37 +56,43 @@ jobs:
           VERSION="$(make kernelversion)-${PKGARCH}-$(date -u +%d%m%Y%H%M)-$(echo ${PKGOS} | sed "s/-//g")"
           echo "${VERSION}"
           echo "${VERSION}" > ../.version
+          
       - name: Update the configuration
         run: |
           export KDEB_PKGVERSION="$(cat ../.version)"
           make oldconfig
           git diff .config > ../linux-${KDEB_PKGVERSION}.config.diff
           git commit -m "TEMP: Refresh kernel configuration" .config
+          
       - name: Prepare for the build
         run: |
           mv .config .config.new
           git commit -m "TEMP: Remove config from index" .config
           mv .config.new .config
+          
       - name: Build the kernel
         env:
           DEBEMAIL: ${{ secrets.GIT_MAIL }}
-          DEBFULLNAME: "Linux kernel build"
+          DEBFULLNAME: "AzagraMac"
           KDEB_CHANGELOG_DIST: "${{ matrix.os }}"
           KDEB_COMPRESS: "zstd"
           PKGOS: "${{ matrix.os }}"
         run: |
           [ "${PKGOS}" = "debian-12" ] && export KDEB_COMPRESS="gzip"
           export KDEB_PKGVERSION="$(cat ../.version)"
-          export KDEB_SOURCENAME="linux-azagramac-${KDEB_PKGVERSION}"
-          make deb-pkg -j24 || make deb-pkg -j24
+          export KDEB_SOURCENAME="linux-wireguard-azagramac-${KDEB_PKGVERSION}"
+          make deb-pkg -j32 || make deb-pkg -j32 # ryzen 9 5950x
+          
       - name: Prepare the artifacts
         run: |
           mkdir out/
           mv ../linux-* out/
+          mv ../wireguard* out/
           rm -f out/*dbg*
+
       - name: Upload resulting build
         uses: actions/upload-artifact@v3
         continue-on-error: true
         with:
-          name: ${{ matrix.os }}-${{ matrix.arch }}
+          name: ${{ matrix.os }}-wireguard-${{ matrix.arch }}
           path: out/*
